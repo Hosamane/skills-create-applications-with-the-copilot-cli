@@ -32,9 +32,24 @@ function divide(a, b) {
   }
   return a / b;
 }
+function modulo(a, b) {
+  if (b === 0) {
+    throw new Error('Modulo by zero');
+  }
+  return a % b;
+}
+function power(base, exponent) {
+  return Math.pow(base, exponent);
+}
+function squareRoot(n) {
+  if (n < 0) {
+    throw new Error('Square root of negative number');
+  }
+  return Math.sqrt(n);
+}
 
 // Exported for tests or require() use
-module.exports = { add, subtract, multiply, divide };
+module.exports = { add, subtract, multiply, divide, modulo, power, squareRoot };
 
 // CLI handling
 if (require.main === module) {
@@ -45,7 +60,7 @@ if (require.main === module) {
     console.log('  node src/calculator.js add 2 3');
     console.log('  node src/calculator.js "2 + 3"');
     console.log('  node src/calculator.js 4 / 2');
-    console.log('\nSupported operations: +, -, *, / (also: add, sub, mul, div)');
+    console.log('\nSupported operations: +, -, *, /, %, ^, sqrt (also: add, sub, mul, div, mod, pow, sqrt)');
     process.exit(0);
   }
 
@@ -72,8 +87,8 @@ if (require.main === module) {
     if (args.length === 1) {
       // Possibly an expression string like "2 + 3"
       const expr = args[0].trim();
-      // Match: number operator number (allow spaces)
-      const m = expr.match(/^([+-]?\d*\.?\d+(?:e[+-]?\d+)?)\s*([+\-*/xX])\s*([+-]?\d*\.?\d+(?:e[+-]?\d+)?)$/i);
+      // Match: number operator number (allow spaces). Support + - * / x % ^
+      const m = expr.match(/^([+-]?\d*\.?\d+(?:e[+-]?\d+)?)\s*([+\-*/xX%\^])\s*([+-]?\d*\.?\d+(?:e[+-]?\d+)?)$/i);
       if (!m) {
         console.error('Could not parse expression. Use: "2 + 3" or operands and operator separately.');
         process.exit(1);
@@ -85,9 +100,11 @@ if (require.main === module) {
       else if (sym === '-') op = 'sub';
       else if (sym === '*' ) op = 'mul';
       else if (sym === '/' ) op = 'div';
+      else if (sym === '%' ) op = 'mod';
+      else if (sym === '^' ) op = 'pow';
       else if (sym === 'x' || sym === 'X') op = 'mul';
     } else if (args.length >= 2) {
-      // Form: <op> <a> <b>
+      // Form: <op> <a> <b>  OR  <a> <op> <b>
       const maybeOp = args[0].toLowerCase();
       const opMap = {
         '+': 'add',
@@ -98,16 +115,31 @@ if (require.main === module) {
         'x': 'mul',
         'mul': 'mul',
         '/': 'div',
-        'div': 'div'
+        'div': 'div',
+        '%': 'mod',
+        'mod': 'mod',
+        '^': 'pow',
+        'pow': 'pow',
+        'sqrt': 'sqrt'
       };
+
       if (opMap[maybeOp]) {
         op = opMap[maybeOp];
-        a = toNumber(args[1]);
-        if (args.length < 3) {
-          console.error('Missing second operand');
-          process.exit(1);
+        // unary sqrt: op a
+        if (op === 'sqrt') {
+          if (args.length < 2) {
+            console.error('Missing operand for sqrt');
+            process.exit(1);
+          }
+          a = toNumber(args[1]);
+        } else {
+          a = toNumber(args[1]);
+          if (args.length < 3) {
+            console.error('Missing second operand');
+            process.exit(1);
+          }
+          b = toNumber(args[2]);
         }
-        b = toNumber(args[2]);
       } else {
         // Maybe form: <a> <op> <b>
         a = toNumber(args[0]);
@@ -118,10 +150,14 @@ if (require.main === module) {
         else if (symLower === '-') op = 'sub';
         else if (symLower === '*' || symLower === 'x') op = 'mul';
         else if (symLower === '/') op = 'div';
+        else if (symLower === '%') op = 'mod';
+        else if (symLower === '^') op = 'pow';
         else if (symLower === 'add') op = 'add';
         else if (symLower === 'sub') op = 'sub';
         else if (symLower === 'mul') op = 'mul';
         else if (symLower === 'div') op = 'div';
+        else if (symLower === 'mod') op = 'mod';
+        else if (symLower === 'pow') op = 'pow';
         else {
           console.error(`Unknown operator: ${sym}`);
           process.exit(1);
@@ -130,7 +166,7 @@ if (require.main === module) {
     }
 
     if (!op) {
-      console.error('Operator not recognized. Use +, -, *, / or add, sub, mul, div');
+      console.error('Operator not recognized. Use +, -, *, /, %, ^, sqrt or add, sub, mul, div, mod, pow, sqrt');
       process.exit(1);
     }
 
@@ -148,6 +184,20 @@ if (require.main === module) {
       case 'div':
         result = divide(a, b);
         break;
+      case 'mod':
+      case 'modulo':
+        result = modulo(a, b);
+        break;
+      case 'pow':
+      case 'power':
+        result = power(a, b);
+        break;
+      case 'sqrt':
+      {
+        // unary op: a holds the single operand
+        result = squareRoot(a);
+        break;
+      }
       default:
         throw new Error('Unsupported operation');
     }
@@ -161,6 +211,14 @@ if (require.main === module) {
     if (err && err.message === 'Division by zero') {
       console.error('Error: Division by zero');
       process.exit(2);
+    }
+    if (err && err.message === 'Modulo by zero') {
+      console.error('Error: Modulo by zero');
+      process.exit(2);
+    }
+    if (err && err.message === 'Square root of negative number') {
+      console.error('Error: Square root of negative number');
+      process.exit(3);
     }
     // If error already printed, just exit with non-zero
     process.exit(process.exitCode || 1);
